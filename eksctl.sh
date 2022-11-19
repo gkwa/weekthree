@@ -17,7 +17,7 @@ export CLUSTER_NAME
 KARPENTER_VERSION=v$(curl -s https://api.github.com/repos/aws/karpenter/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's#v##')
 export KARPENTER_VERSION
 
-export KARPENTER_VERSION=v0.19.0
+export KARPENTER_VERSION=v0.19.1
 echo $KARPENTER_VERSION
 
 time eksctl create cluster -f - <<EOF
@@ -41,7 +41,7 @@ iam:
 availabilityZones: ['us-east-1a', 'us-east-1b', 'us-east-1c', 'us-east-1d']
 EOF
 
-CLUSTER_ENDPOINT="$(aws eks describe-cluster --name "${CLUSTER_NAME}" --query "cluster.endpoint" --output text)"
+CLUSTER_ENDPOINT="$(aws eks describe-cluster --name "${CLUSTER_NAME}" --query cluster.endpoint --output text)"
 export CLUSTER_ENDPOINT
 echo "$CLUSTER_ENDPOINT"
 
