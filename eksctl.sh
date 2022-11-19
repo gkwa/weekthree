@@ -79,9 +79,6 @@ time aws iam create-service-linked-role --aws-service-name spot.amazonaws.com ||
 
 # https://karpenter.sh/preview/getting-started/getting-started-with-eksctl/#install-karpenter-helm-chart
 
-time helm repo add karpenter https://charts.karpenter.sh/
-time helm repo update
-
 # export KARPENTER_VERSION=v0.10.1
 # export AWS_DEFAULT_REGION="us-east-1"
 # export CLUSTER_NAME="${USER}-karpenter-demo"
@@ -108,13 +105,15 @@ echo creating .vars.sh so we can cleanup
 } >.vars.sh
 chmod +x .vars.sh
 
-time helm upgrade --install --namespace karpenter --create-namespace \
-    karpenter karpenter/karpenter \
+time helm upgrade --install karpenter oci://public.ecr.aws/karpenter/karpenter \
     --version ${KARPENTER_VERSION} \
+    --namespace karpenter \
+    --create-namespace \
     --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="${KARPENTER_IAM_ROLE_ARN}" \
-    --set clusterName="${CLUSTER_NAME}" \
-    --set clusterEndpoint="${CLUSTER_ENDPOINT}" \
-    --set aws.defaultInstanceProfile="KarpenterNodeInstanceProfile-${CLUSTER_NAME}" \
+    --set settings.aws.clusterName="${CLUSTER_NAME}" \
+    --set settings.aws.clusterEndpoint="${CLUSTER_ENDPOINT}" \
+    --set settings.aws.defaultInstanceProfile="KarpenterNodeInstanceProfile-${CLUSTER_NAME}" \
+    --set settings.aws.interruptionQueueName="${CLUSTER_NAME}" \
     --wait # for the defaulting webhook to install before creating a Provisioner
 
 eksctl utils describe-stacks --region="${AWS_DEFAULT_REGION}" --cluster="${CLUSTER_NAME}"
@@ -138,10 +137,17 @@ spec:
   limits:
     resources:
       cpu: 1000
-  provider:
-    subnetSelector:
-      karpenter.sh/discovery: ${CLUSTER_NAME}
-    securityGroupSelector:
-      karpenter.sh/discovery: ${CLUSTER_NAME}
+  providerRef:
+    name: default
   ttlSecondsAfterEmpty: 30
+---
+apiVersion: karpenter.k8s.aws/v1alpha1
+kind: AWSNodeTemplate
+metadata:
+  name: default
+spec:
+  subnetSelector:
+    karpenter.sh/discovery: ${CLUSTER_NAME}
+  securityGroupSelector:
+    karpenter.sh/discovery: ${CLUSTER_NAME}
 EOF
