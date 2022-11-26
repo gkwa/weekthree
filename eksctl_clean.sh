@@ -3,6 +3,8 @@
 set -o nounset
 set -o xtrace
 
+. .vars.sh
+
 echo AWS_ACCOUNT_ID="$AWS_ACCOUNT_ID"
 echo AWS_DEFAULT_REGION="$AWS_DEFAULT_REGION"
 echo CLUSTER_ENDPOINT="$CLUSTER_ENDPOINT"

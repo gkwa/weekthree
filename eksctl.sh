@@ -6,40 +6,49 @@ set -o nounset
 set -o errexit
 set -o xtrace
 
-AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-export AWS_ACCOUNT_ID
-
-export AWS_DEFAULT_REGION="us-east-1"
-
-CLUSTER_NAME="${USER}-karpenter-demo-$(date +%Y%m%d%H)"
-export CLUSTER_NAME
+export AWS_DEFAULT_REGION=us-east-1
 
 KARPENTER_VERSION=v$(curl -s https://api.github.com/repos/aws/karpenter/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's#v##')
 export KARPENTER_VERSION
 
-export KARPENTER_VERSION=v0.19.1
-echo $KARPENTER_VERSION
+# override:
+# export KARPENTER_VERSION=v0.19.0
 
-time eksctl create cluster -f - <<EOF
+export KUBERNETES_VERSION=1.23 # check here before changing https://karpenter.sh/preview/getting-started/getting-started-with-eksctl/
+
+echo KUBERNETES_VERSION=$KUBERNETES_VERSION
+echo KARPENTER_VERSION=$KARPENTER_VERSION
+
+AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+export AWS_ACCOUNT_ID
+
+CLUSTER_NAME="${USER}-karpenter-demo-$(date +%Y%m%d%H)"
+export CLUSTER_NAME
+
+export KARPENTER_VERSION
+
+cat >cluster.yaml <<EOF
 apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 metadata:
   name: ${CLUSTER_NAME}
   region: ${AWS_DEFAULT_REGION}
-  version: "1.23"
+  version: "${KUBERNETES_VERSION}"
   tags:
     karpenter.sh/discovery: ${CLUSTER_NAME}
 managedNodeGroups:
 - instanceType: m5.large
   amiFamily: AmazonLinux2
   name: ${CLUSTER_NAME}-ng
-  desiredCapacity: 1
+  desiredCapacity: 2
   minSize: 1
   maxSize: 10
 iam:
   withOIDC: true
 availabilityZones: ['us-east-1a', 'us-east-1b', 'us-east-1c', 'us-east-1d']
 EOF
+
+time eksctl create cluster -f cluster.yaml
 
 CLUSTER_ENDPOINT="$(aws eks describe-cluster --name "${CLUSTER_NAME}" --query cluster.endpoint --output text)"
 export CLUSTER_ENDPOINT
@@ -151,29 +160,3 @@ spec:
   securityGroupSelector:
     karpenter.sh/discovery: ${CLUSTER_NAME}
 EOF
-
-cat <<EOF | kubectl apply -f -
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: inflate
-spec:
-  replicas: 0
-  selector:
-    matchLabels:
-      app: inflate
-  template:
-    metadata:
-      labels:
-        app: inflate
-    spec:
-      terminationGracePeriodSeconds: 0
-      containers:
-        - name: inflate
-          image: public.ecr.aws/eks-distro/kubernetes/pause:3.7
-          resources:
-            requests:
-              cpu: 1
-EOF
-kubectl scale deployment inflate --replicas 5
-kubectl logs -f -n karpenter -l app.kubernetes.io/name=karpenter -c controller
